@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+groq
+google-generativeai
+supabase
+python-dotenv
+resend
+pydantic
+pydantic-settings
+python-multipart
+postgrest
