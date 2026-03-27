@@ -14,9 +14,17 @@ groq_client = Groq(api_key=api_key) if api_key else None
 
 # Gemini Client
 google_key = os.environ.get("GOOGLE_API_KEY")
+gemini_model = None
 if google_key:
     genai.configure(api_key=google_key)
-gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+    # Try multiple common model IDs in case one is not available
+    for model_name in ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro', 'gemini-1.0-pro']:
+        try:
+            gemini_model = genai.GenerativeModel(model_name)
+            # Basic check to see if model exists (optional, but we'll try to use it in evaluate_interview)
+            break
+        except Exception:
+            continue
 
 def extract_skills_from_jd(jd_text: str) -> List[str]:
     """
@@ -69,7 +77,7 @@ def extract_skills_from_jd(jd_text: str) -> List[str]:
 
 def evaluate_interview(jd_text: str, history: List[Dict[str, str]]) -> Dict:
     """
-    Uses Gemini 1.5 Flash to evaluate the whole interview and return a structured JSON report.
+    Uses Gemini 1.5 Flash (or fallback) to evaluate the whole interview and return a structured JSON report.
     """
     history_text = "\n".join([f"{m['role']}: {m['content']}" for m in history])
     
@@ -91,13 +99,42 @@ def evaluate_interview(jd_text: str, history: List[Dict[str, str]]) -> Dict:
     Do not include markdown or extra text.
     """
     
-    response = gemini_model.generate_content(prompt)
-    response_text = response.text.strip()
+    # Try multiple models directly in the call
+    response_text = None
+    for model_name in ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001', 'gemini-pro']:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            if response_text:
+                break
+        except Exception as e:
+            print(f"Skipping model {model_name} due to: {e}")
+            continue
+
+    if not response_text:
+        return {
+            "scores": {},
+            "strengths": ["Evaluation failed (AI unavailable)"],
+            "weaknesses": [],
+            "overall_recommendation": "Maybe",
+            "feedback_text": "We encountered an issue connecting to the evaluation engine."
+        }
     
     try:
-        if "```" in response_text:
-            response_text = response_text.split("```")[1].replace("json", "").strip()
+        # Find the first { and last } to extract JSON if Gemini adds conversational filler
+        start_idx = response_text.find("{")
+        end_idx = response_text.rfind("}")
+        if start_idx != -1 and end_idx != -1:
+            response_text = response_text[start_idx:end_idx+1]
+        
         return json.loads(response_text)
     except Exception as e:
         print(f"Error parsing evaluation: {e}")
-        return {}
+        return {
+            "scores": {},
+            "strengths": ["Evaluation failed to parse"],
+            "weaknesses": [],
+            "overall_recommendation": "Maybe",
+            "feedback_text": f"Technical error during evaluation generation: {e}"
+        }

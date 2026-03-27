@@ -4,12 +4,19 @@ import { useState } from "react";
 import { Upload, FileText, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import { Login } from "./_components/login";
+import { Signup } from "./_components/signup";
+import { Dashboard } from "./_components/dashboard";
 
 export default function AdminDashboard() {
     const [jdText, setJdText] = useState("");
     const [loading, setLoading] = useState(false);
     const [extractedSkills, setExtractedSkills] = useState<string[]>([]);
+    const [interviewId, setInterviewId] = useState<string | null>(null);
+    const [candidateName, setCandidateName] = useState("");
+    const [links, setLinks] = useState<{ candidate: string, observer: string } | null>(null);
     const router = useRouter();
+
 
     const handleUpload = async () => {
         if (!jdText) return;
@@ -20,6 +27,8 @@ export default function AdminDashboard() {
                 jd_text: jdText,
             });
             setExtractedSkills(response.data.jd_skills);
+            setInterviewId(response.data.id);
+
         } catch (error) {
             console.error("Error uploading JD:", error);
             alert("Failed to process JD. Make sure the backend is running.");
@@ -27,6 +36,27 @@ export default function AdminDashboard() {
             setLoading(false);
         }
     };
+
+    const handleGenerateSession = async () => {
+        if (!interviewId || !candidateName) return;
+        setLoading(true);
+        try {
+            const response = await axios.post("http://127.0.0.1:8000/api/v1/sessions/", {
+                interview_id: interviewId,
+                candidate_name: candidateName,
+            });
+            setLinks({
+                candidate: response.data.candidate_link,
+                observer: response.data.observer_link
+            });
+        } catch (error) {
+            console.error("Error generating session:", error);
+            alert("Failed to create session.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     return (
         <div className="min-h-screen p-8 bg-[#09090b] text-[#fafafa]">
@@ -37,6 +67,9 @@ export default function AdminDashboard() {
                         <p className="text-muted-foreground mt-2">Upload a Job Description to start a new AI interview session.</p>
                     </div>
                 </header>
+                <Login />
+                <Signup />
+                <Dashboard />
 
                 <main className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Left: Input */}
@@ -93,21 +126,63 @@ export default function AdminDashboard() {
                             )}
                         </div>
 
-                        {extractedSkills.length > 0 && (
-                            <div className="glass p-6 rounded-2xl border-primary/20 bg-primary/5">
-                                <p className="text-sm text-primary-foreground mb-4">JD analysis complete! You can now send the link to candidates.</p>
-                                <div className="flex gap-2">
-                                    <input
-                                        readOnly
-                                        value="http://localhost:3000/interview/sample-session"
-                                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono"
-                                    />
-                                    <button className="bg-white text-black px-4 py-2 rounded-lg text-sm font-semibold hover:bg-white/90 transition-all">
-                                        Copy Link
-                                    </button>
+                        {interviewId && !links && (
+                            <div className="glass p-6 rounded-2xl border-indigo-500/20 bg-indigo-500/5 space-y-4">
+                                <h4 className="text-sm font-semibold">Generate Private Session</h4>
+                                <input
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="Enter Candidate Name..."
+                                    value={candidateName}
+                                    onChange={(e) => setCandidateName(e.target.value)}
+                                />
+                                <button
+                                    onClick={handleGenerateSession}
+                                    disabled={loading || !candidateName}
+                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 rounded-xl text-sm transition-all"
+                                >
+                                    Create Session & Get Links
+                                </button>
+                            </div>
+                        )}
+
+                        {links && (
+                            <div className="glass p-6 rounded-2xl border-indigo-500/20 bg-indigo-500/5 space-y-6">
+                                <div className="space-y-3">
+                                    <p className="text-xs font-bold uppercase text-indigo-400">Candidate Link (Single Use)</p>
+                                    <div className="flex gap-2">
+                                        <input
+                                            readOnly
+                                            value={links.candidate}
+                                            className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] font-mono"
+                                        />
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(links.candidate)}
+                                            className="bg-white text-black px-3 py-1 rounded-lg text-xs font-bold hover:bg-white/90"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <p className="text-xs font-bold uppercase text-indigo-400">Observer Link (Read Only)</p>
+                                    <div className="flex gap-2">
+                                        <input
+                                            readOnly
+                                            value={links.observer}
+                                            className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[10px] font-mono"
+                                        />
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(links.observer)}
+                                            className="bg-white text-black px-3 py-1 rounded-lg text-xs font-bold hover:bg-white/90"
+                                        >
+                                            Copy
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
+
                     </section>
                 </main>
             </div>

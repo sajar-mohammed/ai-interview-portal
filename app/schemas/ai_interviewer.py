@@ -30,6 +30,14 @@ class Session(SessionBase):
     started_at: datetime
     ended_at: Optional[datetime] = None
     checklist_state: Dict[str, bool] = {} # skill -> covered
+    recruiter_id: Optional[str] = None
+    candidate_token_used: bool = False
+
+class SessionLinks(BaseModel):
+    session_id: str
+    candidate_link: str
+    observer_link: str
+
 
 # --- Message (Interview Chat) ---
 class MessageCreate(BaseModel):

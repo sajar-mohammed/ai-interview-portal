@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Mic, MicOff, Send, MessageSquare, User, Bot, Sparkles, Trophy } from "lucide-react";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+
 
 export default function InterviewPage() {
     const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
@@ -13,10 +14,17 @@ export default function InterviewPage() {
     const [loading, setLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const { sessionId } = useParams();
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const token = searchParams.get("token");
+
+    const [role, setRole] = useState<string | null>(null);
+    const [candidateName, setCandidateName] = useState("Candidate");
 
     const [coverage, setCoverage] = useState(0);
     const [timer, setTimer] = useState(60); // 60 seconds per question
     const timerRef = useRef<any>(null);
+
 
     // --- Inactivity Timer ---
     useEffect(() => {
@@ -154,27 +162,63 @@ export default function InterviewPage() {
     };
 
     useEffect(() => {
-        // Start interview with a greeting
-        if (messages.length === 0 && sessionId) {
-            const startInterview = async () => {
+        // Load existing status and history or start new interview
+        if (sessionId) {
+            const initSession = async () => {
                 try {
-                    const response = await axios.post("http://127.0.0.1:8000/api/v1/sessions/chat", {
-                        session_id: sessionId,
-                        role: "user",
-                        content: "Hello, let's start the interview.",
-                    });
-                    const { next_question, coverage_percentage } = response.data;
-                    const aiMsg = { role: "assistant", content: next_question };
-                    setMessages([aiMsg]);
-                    setCoverage(coverage_percentage);
-                    speak(next_question);
+                    // 0. Validate Token if present
+                    let currentRole = "candidate";
+                    if (token) {
+                        try {
+                            const valRes = await axios.get(`http://127.0.0.1:8000/api/v1/sessions/validate-token?token=${token}`);
+                            currentRole = valRes.data.role;
+                            setRole(currentRole);
+                            setCandidateName(valRes.data.candidate_name);
+                        } catch (err) {
+                            console.error("Token validation failed:", err);
+                            alert("Invalid or expired access token.");
+                            // router.push("/login"); // Optional redirect
+                            return;
+                        }
+                    } else {
+                        // If no token, we might want to restrict access or assume public for now
+                        // For this task, let's assume token is required for private sessions
+                        setRole("candidate");
+                    }
+
+                    // 1. Check for existing messages
+                    const historyRes = await axios.get(`http://127.0.0.1:8000/api/v1/sessions/${sessionId}/messages`);
+
+                    if (historyRes.data.length > 0) {
+                        setMessages(historyRes.data.map((m: any) => ({ role: m.role, content: m.content })));
+                        // Also fetch session metadata for coverage
+                        const sessionRes = await axios.get(`http://127.0.0.1:8000/api/v1/sessions/${sessionId}`);
+                        // Calculate coverage from checklist_state
+                        const checklist = sessionRes.data.checklist_state;
+                        const total = Object.keys(checklist).length;
+                        const covered = Object.values(checklist).filter(v => v).length;
+                        setCoverage(Math.round((covered / total) * 100));
+                    } else if (currentRole === "candidate") {
+                        // 2. Start new interview if no history AND is candidate
+                        const response = await axios.post("http://127.0.0.1:8000/api/v1/sessions/chat", {
+                            session_id: sessionId,
+                            role: "user",
+                            content: "Hello, let's start the interview.",
+                        });
+                        const { next_question, coverage_percentage } = response.data;
+                        const aiMsg = { role: "assistant", content: next_question };
+                        setMessages([aiMsg]);
+                        setCoverage(coverage_percentage);
+                        speak(next_question);
+                    }
                 } catch (e) {
-                    console.error("Start error:", e);
+                    console.error("Session init error:", e);
                 }
             };
-            startInterview();
+            initSession();
         }
-    }, [sessionId]);
+    }, [sessionId, token]);
+
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -182,6 +226,22 @@ export default function InterviewPage() {
 
     const handleSkip = () => {
         handleSend("I would like to skip this question and move to the next topic.");
+    };
+
+    const handleFinish = async () => {
+        if (!window.confirm("Are you sure you want to end the interview and generate your report?")) return;
+        setLoading(true);
+        try {
+            // Trigger evaluation on the backend
+            await axios.post(`http://127.0.0.1:8000/api/v1/sessions/${sessionId}/evaluate`);
+            // Redirect to results page
+            window.location.href = `/interview/${sessionId}/results`;
+        } catch (error) {
+            console.error("Evaluation error:", error);
+            alert("Failed to generate evaluation. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -232,6 +292,15 @@ export default function InterviewPage() {
                             <Send size={14} className="rotate-45" />
                             Next Question
                         </button>
+
+                        <button
+                            onClick={handleFinish}
+                            disabled={loading}
+                            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                        >
+                            <Trophy size={14} />
+                            Finish Interview
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-3 p-4 bg-zinc-900/50 rounded-2xl border border-white/5">
@@ -239,10 +308,11 @@ export default function InterviewPage() {
                             <User size={16} />
                         </div>
                         <div>
-                            <p className="text-xs font-semibold">Candidate</p>
-                            <p className="text-[10px] text-zinc-500">Live Session ID: #294</p>
+                            <p className="text-xs font-semibold">{candidateName}</p>
+                            <p className="text-[10px] text-zinc-500">{role === 'observer' ? 'Viewing as Observer' : 'Live Interview'}</p>
                         </div>
                     </div>
+
                 </aside>
 
                 {/* Right Side: Chat Area */}
@@ -281,30 +351,37 @@ export default function InterviewPage() {
                     </div>
 
                     <footer className="p-6 border-t border-white/5 bg-zinc-900/20">
-                        <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-2 rounded-2xl focus-within:border-indigo-500/50 transition-all">
-                            <button
-                                onClick={toggleListening}
-                                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${isListening ? "bg-red-500 text-white animate-pulse" : "hover:bg-zinc-800 text-zinc-500"
-                                    }`}
-                            >
-                                {isListening ? <Mic size={20} /> : <MicOff size={20} />}
-                            </button>
-                            <input
-                                className="flex-1 bg-transparent border-none outline-none text-sm py-2"
-                                placeholder="Type your response here..."
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                            />
-                            <button
-                                onClick={() => handleSend()}
-                                disabled={!input.trim() || loading}
-                                className="w-10 h-10 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white flex items-center justify-center rounded-xl shadow-lg shadow-indigo-500/20 transition-all"
-                            >
-                                <Send size={18} />
-                            </button>
-                        </div>
+                        {role === 'observer' ? (
+                            <div className="p-4 bg-zinc-800/50 rounded-2xl text-center text-xs text-zinc-400 border border-white/5">
+                                You are in read-only observer mode.
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-2 rounded-2xl focus-within:border-indigo-500/50 transition-all">
+                                <button
+                                    onClick={toggleListening}
+                                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${isListening ? "bg-red-500 text-white animate-pulse" : "hover:bg-zinc-800 text-zinc-500"
+                                        }`}
+                                >
+                                    {isListening ? <Mic size={20} /> : <MicOff size={20} />}
+                                </button>
+                                <input
+                                    className="flex-1 bg-transparent border-none outline-none text-sm py-2"
+                                    placeholder="Type your response here..."
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                                />
+                                <button
+                                    onClick={() => handleSend()}
+                                    disabled={!input.trim() || loading}
+                                    className="w-10 h-10 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white flex items-center justify-center rounded-xl shadow-lg shadow-indigo-500/20 transition-all"
+                                >
+                                    <Send size={18} />
+                                </button>
+                            </div>
+                        )}
                     </footer>
+
                 </main>
             </div>
         </div>

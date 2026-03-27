@@ -1,14 +1,18 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas.ai_interviewer import Session, SessionCreate, Message, MessageCreate, Evaluation
-from app.services import interview_service, ai_service, db_service
+from app.schemas.ai_interviewer import Session, SessionCreate, Message, MessageCreate, Evaluation, SessionLinks
+from app.services import interview_service, ai_service, db_service, auth_service
 import uuid
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import List
 
 router = APIRouter()
 
-@router.post("/", response_model=Session)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+@router.post("/", response_model=SessionLinks)
 async def start_session(session_in: SessionCreate):
+
     # 1. Fetch interview from Supabase
     try:
         interview_res = db_service.get_interview(session_in.interview_id)
@@ -30,7 +34,41 @@ async def start_session(session_in: SessionCreate):
     }
     
     db_service.create_session(new_session)
-    return new_session
+    
+    # 3. Generate tokens
+    candidate_token = auth_service.generate_interview_token(session_id, role="candidate")
+    observer_token = auth_service.generate_interview_token(session_id, role="observer")
+    
+    return SessionLinks(
+        session_id=session_id,
+        candidate_link=f"{FRONTEND_URL}/interview/{session_id}?token={candidate_token}",
+        observer_link=f"{FRONTEND_URL}/interview/{session_id}?token={observer_token}"
+    )
+
+@router.get("/validate-token")
+async def validate_token(token: str):
+    payload = auth_service.verify_interview_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    session_id = payload.get("sub")
+    role = payload.get("role")
+    
+    session_res = db_service.get_session(session_id)
+    session = session_res.data
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    # If candidate, check if token was already used (optional strictness)
+    # For now, we'll allow re-entry if the session is still active
+    
+    return {
+        "session_id": session_id,
+        "role": role,
+        "candidate_name": session["candidate_name"]
+    }
+
 
 from app.schemas.ai_interviewer import ChatResponse 
 
@@ -90,6 +128,7 @@ async def handle_chat(message_in: MessageCreate):
 
 @router.post("/{session_id}/evaluate", response_model=Evaluation)
 async def trigger_evaluation(session_id: str):
+    # ... (existing evaluate logic)
     # 1. Fetch session and interview
     try:
         session_res = db_service.get_session(session_id)
@@ -115,3 +154,15 @@ async def trigger_evaluation(session_id: str):
     db_service.create_evaluation(evaluation_data)
     
     return evaluation_data
+
+@router.get("/{session_id}")
+async def get_session_details(session_id: str):
+    res = db_service.get_session(session_id)
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return res.data
+
+@router.get("/{session_id}/messages")
+async def get_session_messages(session_id: str):
+    res = db_service.get_session_messages(session_id)
+    return res.data
