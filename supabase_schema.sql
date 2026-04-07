@@ -1,8 +1,10 @@
 -- ⚠️ CLEAN RE-INITIALIZATION (Run this in Supabase SQL Editor)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 DROP TABLE IF EXISTS evaluations CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS interviews CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
 -- 1. Interviews Table
 CREATE TABLE interviews (
@@ -42,5 +44,14 @@ CREATE TABLE evaluations (
     weaknesses JSONB NOT NULL DEFAULT '[]',
     overall_recommendation TEXT,
     feedback_text TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 5. Users Table
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT UNIQUE NOT NULL,
+    hashed_password TEXT NOT NULL,
+    role TEXT DEFAULT 'recruiter',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

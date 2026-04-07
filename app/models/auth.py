@@ -10,14 +10,15 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
 
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
-    role: str
-    created_at: str
+    role: str = "recruiter"
+    created_at: str | None = None
 
 class AuthResponse(BaseModel):
     user: UserResponse
-    token: TokenResponse
+    access_token: str
+    token_type: str = "bearer"

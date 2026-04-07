@@ -17,19 +17,36 @@ async def register(request: RegisterRequest):
         )
     
     hashed_password = get_password_hash(request.password)
-    user_res = db_service.create_user(request.email, hashed_password)
-    user = user_res.data[0]
-    
-    access_token = create_access_token({"user_id": user["id"], "role": user["role"]})
-    return AuthResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=UserResponse(
-            id=user["id"],
-            email=user["email"],
-            role=user["role"],
-        ),
-    )
+    try:
+        user_res = db_service.create_user(request.email, hashed_password)
+        if not user_res.data:
+            print(f"DEBUG: Registration failed for {request.email}. Supabase returned: {user_res}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user in database",
+            )
+        
+        user = user_res.data[0]
+        access_token = create_access_token({"user_id": user["id"], "role": user.get("role", "recruiter")})
+        
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=UserResponse(
+                id=user["id"],
+                email=user["email"],
+                role=user.get("role", "recruiter"),
+                created_at=user.get("created_at")
+            ),
+        )
+    except Exception as e:
+        print(f"ERROR during registration: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
 
 @router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest):
