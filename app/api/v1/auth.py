@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse, AuthResponse
+from app.models.auth import RegisterRequest, LoginRequest, TokenResponse, UserResponse, AuthResponse
 from app.core.security import get_password_hash, verify_password, create_access_token, decode_access_token
 from app.core.config import get_settings
-from app.services import db_service
+from app.db import repository as db_service
 
 settings = get_settings()
 router = APIRouter()

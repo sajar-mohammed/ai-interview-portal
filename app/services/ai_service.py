@@ -3,7 +3,7 @@ import json
 from groq import Groq
 import google.generativeai as genai
 from dotenv import load_dotenv
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 
 load_dotenv()
 
@@ -18,10 +18,10 @@ gemini_model = None
 if google_key:
     genai.configure(api_key=google_key)
     # Try multiple common model IDs in case one is not available
-    for model_name in ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro', 'gemini-1.0-pro']:
+    for model_name in ['models/gemini-flash-latest', 'models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro-latest', 'gemini-pro']:
         try:
             gemini_model = genai.GenerativeModel(model_name)
-            # Basic check to see if model exists (optional, but we'll try to use it in evaluate_interview)
+            # Basic check to see if model exists
             break
         except Exception:
             continue
@@ -75,16 +75,56 @@ def extract_skills_from_jd(jd_text: str) -> List[str]:
 
     return []
 
-def evaluate_interview(jd_text: str, history: List[Dict[str, str]]) -> Dict:
+def sanitize_scores(scores: Any, expected_skills: Optional[List[str]] = None) -> Dict[str, int]:
+    """
+    Robustly converts Gemini's score output into integers.
+    Handles "8/10", "9", 8.5, etc.
+    If expected_skills is provided, ensures all are present (defaulting to 0).
+    """
+    sanitized = {}
+    
+    # 1. Process what Gemini returned
+    if isinstance(scores, dict):
+        for skill, val in scores.items():
+            try:
+                if isinstance(val, str):
+                    # Handle "8/10" or "8"
+                    val = val.split("/")[0].strip()
+                sanitized[skill] = int(float(val))
+            except (ValueError, TypeError, IndexError):
+                sanitized[skill] = 0
+    
+    # 2. Ensure all expected skills are represented
+    if expected_skills:
+        final_scores = {}
+        for skill in expected_skills:
+            # Try to find a match in sanitized keys (case-insensitive)
+            found_val = 0
+            for s_key, s_val in sanitized.items():
+                if s_key.lower().strip() == skill.lower().strip():
+                    found_val = s_val
+                    break
+            final_scores[skill] = found_val
+        return final_scores
+
+    return sanitized
+
+def evaluate_interview(jd_text: str, history: List[Dict[str, str]], skills: Optional[List[str]] = None) -> Dict:
     """
     Uses Gemini 1.5 Flash (or fallback) to evaluate the whole interview and return a structured JSON report.
     """
     history_text = "\n".join([f"{m['role']}: {m['content']}" for m in history])
     
+    skills_context = ""
+    if skills:
+        skills_context = f"Specifically evaluate and score these skills: {', '.join(skills)}."
+
     prompt = f"""
     You are an expert technical recruiter. Evaluate the following interview based on the Job Description (JD).
     JD: {jd_text}
     
+    {skills_context}
+
     Interview History:
     {history_text}
     
@@ -96,12 +136,14 @@ def evaluate_interview(jd_text: str, history: List[Dict[str, str]]) -> Dict:
         "overall_recommendation": "Hire" | "Maybe" | "No",
         "feedback_text": "Detailed summary of candidate performance."
     }}
+    Important: "scores" must contain a numeric value from 0-10 for each skill.
     Do not include markdown or extra text.
     """
     
     # Try multiple models directly in the call
     response_text = None
-    for model_name in ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-001', 'gemini-pro']:
+    # Prioritizing models confirmed to be working in this environment
+    for model_name in ['models/gemini-flash-latest', 'models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro-latest', 'gemini-pro']:
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
@@ -114,27 +156,40 @@ def evaluate_interview(jd_text: str, history: List[Dict[str, str]]) -> Dict:
 
     if not response_text:
         return {
-            "scores": {},
+            "scores": {s: 0 for s in (skills or [])},
             "strengths": ["Evaluation failed (AI unavailable)"],
             "weaknesses": [],
             "overall_recommendation": "Maybe",
             "feedback_text": "We encountered an issue connecting to the evaluation engine."
         }
     
+    if not response_text:
+        return {
+            "scores": {s: 0 for s in (skills or [])},
+            "strengths": ["Empty response from AI"],
+            "weaknesses": [],
+            "overall_recommendation": "Maybe",
+            "feedback_text": "The evaluation engine returned an empty response."
+        }
+
     try:
         # Find the first { and last } to extract JSON if Gemini adds conversational filler
-        start_idx = response_text.find("{")
-        end_idx = response_text.rfind("}")
+        start_idx = str(response_text).find("{")
+        end_idx = str(response_text).rfind("}")
         if start_idx != -1 and end_idx != -1:
             response_text = response_text[start_idx:end_idx+1]
         
-        return json.loads(response_text)
+        data = json.loads(response_text)
+        # Sanitize scores before returning
+        data["scores"] = sanitize_scores(data.get("scores", {}), skills)
+        return data
     except Exception as e:
         print(f"Error parsing evaluation: {e}")
         return {
-            "scores": {},
+            "scores": {s: 0 for s in (skills or [])},
             "strengths": ["Evaluation failed to parse"],
             "weaknesses": [],
             "overall_recommendation": "Maybe",
             "feedback_text": f"Technical error during evaluation generation: {e}"
         }
+

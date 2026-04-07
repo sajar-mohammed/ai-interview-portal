@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas.ai_interviewer import Session, SessionCreate, Message, MessageCreate, Evaluation, SessionLinks
-from app.services import interview_service, ai_service, db_service, auth_service
+from app.models.ai_interviewer import Session, SessionCreate, Message, MessageCreate, Evaluation, SessionLinks
+from app.services import interview_service, ai_service, auth_service
+from app.db import repository as db_service
 import uuid
 import os
 from datetime import datetime, timedelta
@@ -70,7 +71,7 @@ async def validate_token(token: str):
     }
 
 
-from app.schemas.ai_interviewer import ChatResponse 
+from app.models.ai_interviewer import ChatResponse 
 
 @router.post("/chat", response_model=ChatResponse)
 async def handle_chat(message_in: MessageCreate):
@@ -143,7 +144,7 @@ async def trigger_evaluation(session_id: str):
     history = [{"role": m["role"], "content": m["content"]} for m in history_res.data]
     
     # 3. Call Gemini Evaluation
-    evaluation_data = ai_service.evaluate_interview(interview["jd_text"], history)
+    evaluation_data = ai_service.evaluate_interview(interview["jd_text"], history, skills=interview.get("jd_skills", []))
     
     if not evaluation_data:
         raise HTTPException(status_code=500, detail="Failed to generate evaluation")

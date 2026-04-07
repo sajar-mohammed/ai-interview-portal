@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Upload, FileText, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
-import axios from "axios";
+import { interviewService, sessionService } from "@/services/api";
 import { useRouter } from "next/navigation";
 import { Login } from "./_components/login";
 import { Signup } from "./_components/signup";
@@ -22,13 +22,9 @@ export default function AdminDashboard() {
         if (!jdText) return;
         setLoading(true);
         try {
-            // Calling our FastAPI backend
-            const response = await axios.post("http://127.0.0.1:8000/api/v1/interviews/", {
-                jd_text: jdText,
-            });
+            const response = await interviewService.create(jdText);
             setExtractedSkills(response.data.jd_skills);
             setInterviewId(response.data.id);
-
         } catch (error) {
             console.error("Error uploading JD:", error);
             alert("Failed to process JD. Make sure the backend is running.");
@@ -41,7 +37,7 @@ export default function AdminDashboard() {
         if (!interviewId || !candidateName) return;
         setLoading(true);
         try {
-            const response = await axios.post("http://127.0.0.1:8000/api/v1/sessions/", {
+            const response = await sessionService.start({
                 interview_id: interviewId,
                 candidate_name: candidateName,
             });

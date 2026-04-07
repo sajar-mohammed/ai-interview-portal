@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas.ai_interviewer import Interview, InterviewCreate
-from app.services import ai_service, db_service
+from app.models.ai_interviewer import Interview, InterviewCreate
+from app.services import ai_service
+from app.db import repository as db_service
 import uuid
 from datetime import datetime
 

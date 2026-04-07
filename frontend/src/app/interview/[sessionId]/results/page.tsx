@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import axios from "axios";
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { sessionService } from "@/services/api";
 import { Trophy, CheckCircle2, AlertCircle, ArrowLeft, Star, Quote } from "lucide-react";
 
 interface EvaluationData {
@@ -14,25 +14,25 @@ interface EvaluationData {
 }
 
 export default function ResultsPage() {
-    const { sessionId } = useParams();
+    const { sessionId } = useParams() as { sessionId: string };
+    const router = useRouter();
     const [evaluation, setEvaluation] = useState<EvaluationData | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchEvaluation = async () => {
-            try {
-                // Since trigger_evaluation was already called by the "Finish" button,
-                // we can just fetch it. For robustness, if not found, we could trigger it again.
-                const response = await axios.post(`http://127.0.0.1:8000/api/v1/sessions/${sessionId}/evaluate`);
-                setEvaluation(response.data);
-            } catch (error) {
-                console.error("Error fetching evaluation:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        if (sessionId) fetchEvaluation();
+    const fetchEvaluation = useCallback(async () => {
+        try {
+            const response = await sessionService.triggerEvaluation(sessionId);
+            setEvaluation(response.data);
+        } catch (error) {
+            console.error("Error fetching evaluation:", error);
+        } finally {
+            setLoading(false);
+        }
     }, [sessionId]);
+
+    useEffect(() => {
+        if (sessionId) fetchEvaluation();
+    }, [sessionId, fetchEvaluation]);
 
     if (loading) {
         return (
@@ -52,7 +52,7 @@ export default function ResultsPage() {
                     <AlertCircle size={48} className="text-red-500 mx-auto" />
                     <h1 className="text-xl font-bold">Report Not Found</h1>
                     <p className="text-zinc-400 text-sm">We couldn't retrieve your evaluation. Please ensure the interview was finished correctly.</p>
-                    <button onClick={() => window.history.back()} className="px-6 py-2 bg-zinc-800 rounded-xl text-sm font-medium">Go Back</button>
+                    <button onClick={() => router.back()} className="px-6 py-2 bg-zinc-800 rounded-xl text-sm font-medium">Go Back</button>
                 </div>
             </div>
         );
@@ -61,8 +61,6 @@ export default function ResultsPage() {
     return (
         <div className="min-h-screen bg-[#09090b] text-white p-4 md:p-8 flex justify-center overflow-y-auto">
             <div className="w-full max-w-4xl space-y-8 pb-12">
-
-                {/* Header */}
                 <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="space-y-1">
                         <div className="flex items-center gap-2 text-indigo-400 text-sm font-medium">
@@ -73,10 +71,10 @@ export default function ResultsPage() {
                         <p className="text-zinc-500 text-sm">Session ID: {sessionId}</p>
                     </div>
                     <div className={`px-6 py-3 rounded-2xl border text-lg font-bold flex items-center gap-3 ${evaluation.overall_recommendation === "Hire"
-                            ? "bg-green-500/10 border-green-500/30 text-green-400"
-                            : evaluation.overall_recommendation === "Maybe"
-                                ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
-                                : "bg-red-500/10 border-red-500/30 text-red-400"
+                        ? "bg-green-500/10 border-green-500/30 text-green-400"
+                        : evaluation.overall_recommendation === "Maybe"
+                            ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+                            : "bg-red-500/10 border-red-500/30 text-red-400"
                         }`}>
                         <Star size={20} fill="currentColor" />
                         Recommendation: {evaluation.overall_recommendation}
@@ -84,8 +82,6 @@ export default function ResultsPage() {
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                    {/* Left: Scores */}
                     <div className="md:col-span-1 space-y-6">
                         <section className="glass p-6 rounded-3xl space-y-6">
                             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Skill Mapping</h3>
@@ -108,10 +104,7 @@ export default function ResultsPage() {
                         </section>
                     </div>
 
-                    {/* Right: Feedback */}
                     <div className="md:col-span-2 space-y-6">
-
-                        {/* Summary */}
                         <section className="glass p-8 rounded-3xl relative overflow-hidden">
                             <Quote size={80} className="absolute -top-4 -right-4 text-white/5" />
                             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">Summary Feedback</h3>
@@ -121,7 +114,6 @@ export default function ResultsPage() {
                         </section>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Strengths */}
                             <section className="bg-green-500/5 border border-green-500/10 p-6 rounded-3xl space-y-4">
                                 <h4 className="text-sm font-bold text-green-400 flex items-center gap-2">
                                     <CheckCircle2 size={18} />
@@ -137,7 +129,6 @@ export default function ResultsPage() {
                                 </ul>
                             </section>
 
-                            {/* Weaknesses */}
                             <section className="bg-red-500/5 border border-red-500/10 p-6 rounded-3xl space-y-4">
                                 <h4 className="text-sm font-bold text-red-400 flex items-center gap-2">
                                     <AlertCircle size={18} />
@@ -155,7 +146,7 @@ export default function ResultsPage() {
                         </div>
 
                         <button
-                            onClick={() => window.location.href = '/'}
+                            onClick={() => router.push('/')}
                             className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-white/5"
                         >
                             <ArrowLeft size={16} />
@@ -163,7 +154,6 @@ export default function ResultsPage() {
                         </button>
                     </div>
                 </div>
-
             </div>
         </div>
     );

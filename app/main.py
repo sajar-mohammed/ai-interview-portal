@@ -4,7 +4,7 @@ from app.api.v1.interviews import router as interviews_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.auth import router as auth_router
 
-from app.core.supabase import SUPABASE_URL
+from app.db.session import SUPABASE_URL
 # from app.core.security import get_password_hash, verify_password, create_access_token, decode_access_token
 
 # # Test password hashing

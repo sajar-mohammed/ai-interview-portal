@@ -1,4 +1,4 @@
-from app.schemas.ai_interviewer import MessageCreate, Session
+from app.models.ai_interviewer import MessageCreate, Session
 from groq import Groq
 import os
 import json

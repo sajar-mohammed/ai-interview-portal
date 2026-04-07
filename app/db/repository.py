@@ -1,4 +1,4 @@
-from app.core.supabase import get_supabase
+from app.db.session import get_supabase
 from typing import List, Dict, Any
 
 supabase = get_supabase()
