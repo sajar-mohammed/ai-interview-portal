@@ -10,9 +10,19 @@ class InterviewBase(BaseModel):
 
 class InterviewCreate(BaseModel):
     jd_text: str
+    role_title: str
+    jd_skills: Optional[List[str]] = None
+
+class SkillExtractionRequest(BaseModel):
+    jd_text: str
+
+class SkillExtractionResponse(BaseModel):
+    skills: List[str]
 
 class Interview(InterviewBase):
     id: str
+    role_title: str
+    user_id: str
     created_at: datetime
     status: str = "active"
 

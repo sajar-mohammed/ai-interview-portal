@@ -129,8 +129,15 @@ async def handle_chat(message_in: MessageCreate):
 
 @router.post("/{session_id}/evaluate", response_model=Evaluation)
 async def trigger_evaluation(session_id: str):
-    # ... (existing evaluate logic)
-    # 1. Fetch session and interview
+    # 1. Check if evaluation already exists
+    try:
+        existing_eval = db_service.get_session_results(session_id)
+        if existing_eval.data:
+            return existing_eval.data
+    except Exception:
+        pass # Proceed to generate if retrieval fails or doesn't exist
+        
+    # 2. Fetch session and interview
     try:
         session_res = db_service.get_session(session_id)
         session = session_res.data
@@ -139,11 +146,11 @@ async def trigger_evaluation(session_id: str):
     except Exception:
         raise HTTPException(status_code=404, detail="Session or Interview not found")
     
-    # 2. Fetch History
+    # 3. Fetch History
     history_res = db_service.get_session_messages(session_id)
     history = [{"role": m["role"], "content": m["content"]} for m in history_res.data]
     
-    # 3. Call Gemini Evaluation
+    # 4. Call Gemini Evaluation
     evaluation_data = ai_service.evaluate_interview(interview["jd_text"], history, skills=interview.get("jd_skills", []))
     
     if not evaluation_data:
@@ -151,10 +158,37 @@ async def trigger_evaluation(session_id: str):
     
     evaluation_data["session_id"] = session_id
     
-    # 4. Store in Supabase
+    # 5. Store in Supabase
     db_service.create_evaluation(evaluation_data)
     
     return evaluation_data
+
+from app.core.security import get_current_user
+from fastapi import Depends
+
+@router.get("/interview/{interview_id}")
+async def list_sessions_by_interview(
+    interview_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    # 1. Verify interview belongs to recruiter
+    interview_res = db_service.get_interview(interview_id)
+    interview = interview_res.data
+    if not interview or interview["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view this interview's sessions")
+    
+    # 2. Fetch sessions
+    sessions_res = db_service.get_sessions_by_interview(interview_id)
+    sessions = sessions_res.data
+    
+    # 3. Enrich with evaluation results if available
+    enriched_sessions = []
+    for s in sessions:
+        eval_res = db_service.get_session_results(s["id"])
+        s["evaluation"] = eval_res.data if eval_res.data else None
+        enriched_sessions.append(s)
+        
+    return enriched_sessions
 
 @router.get("/{session_id}")
 async def get_session_details(session_id: str):

@@ -1,11 +1,17 @@
 import api from "@/lib/axios";
 
 export const interviewService = {
-    async create(jdText: string) {
-        return api.post("/api/v1/interviews/", { jd_text: jdText });
+    async create(data: { jd_text: string; role_title: string; jd_skills?: string[] }) {
+        return api.post("/api/v1/interviews/", data);
+    },
+    async extractSkills(jdText: string) {
+        return api.post("/api/v1/interviews/extract-skills", { jd_text: jdText });
     },
     async get(id: string) {
         return api.get(`/api/v1/interviews/${id}`);
+    },
+    async list() {
+        return api.get("/api/v1/interviews/");
     }
 };
 
@@ -27,6 +33,9 @@ export const sessionService = {
     },
     async triggerEvaluation(id: string) {
         return api.post(`/api/v1/sessions/${id}/evaluate`);
+    },
+    async listByInterview(interviewId: string) {
+        return api.get(`/api/v1/sessions/interview/${interviewId}`);
     }
 };
 
