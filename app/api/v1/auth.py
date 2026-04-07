@@ -17,8 +17,19 @@ async def register(request: RegisterRequest):
         )
     
     hashed_password = get_password_hash(request.password)
-    user = db_service.create_user(request.email, hashed_password)
+    user_res = db_service.create_user(request.email, hashed_password)
+    user = user_res.data[0]
     
+    access_token = create_access_token({"user_id": user["id"], "role": user["role"]})
+    return AuthResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse(
+            id=user["id"],
+            email=user["email"],
+            role=user["role"],
+        ),
+    )
 
 @router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest):

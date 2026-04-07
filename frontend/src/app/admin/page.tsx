@@ -4,9 +4,6 @@ import { useState } from "react";
 import { Upload, FileText, ChevronRight, CheckCircle, Loader2 } from "lucide-react";
 import { interviewService, sessionService } from "@/services/api";
 import { useRouter } from "next/navigation";
-import { Login } from "./_components/login";
-import { Signup } from "./_components/signup";
-import { Dashboard } from "./_components/dashboard";
 
 export default function AdminDashboard() {
     const [jdText, setJdText] = useState("");
@@ -63,9 +60,6 @@ export default function AdminDashboard() {
                         <p className="text-muted-foreground mt-2">Upload a Job Description to start a new AI interview session.</p>
                     </div>
                 </header>
-                <Login />
-                <Signup />
-                <Dashboard />
 
                 <main className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Left: Input */}

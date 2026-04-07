@@ -43,14 +43,17 @@ export default function Home() {
             </p>
 
             <div className="flex gap-4">
-              <button className="px-6 py-3 bg-blue-400 text-black rounded-full font-bold">
-                Go to Dashboard
-              </button>
               <Link
-                href="/admin"
+                href="/login"
+                className="px-6 py-3 bg-blue-400 text-black rounded-full font-bold hover:bg-blue-300 transition"
+              >
+                Go to Dashboard
+              </Link>
+              <Link
+                href="/signup"
                 className="px-6 py-3 border border-gray-600 rounded-full hover:bg-white/5 transition inline-block text-center"
               >
-                Try Demo
+                Sign Up Now
               </Link>
             </div>
           </div>
